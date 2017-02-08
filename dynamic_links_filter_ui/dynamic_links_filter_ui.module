@@ -76,6 +76,6 @@ function dynamic_links_filter_ui_load($id) {
  *   Dynamic Links record associated with given text.
  */
 function dynamic_links_filter_ui_load_by_text($text) {
-  $row = db_query('SELECT * FROM {dynamic_links_filter} WHERE text = :text', array(':text' => strtolower(trim($text))))->fetchAssoc();
+  $row = db_query('SELECT * FROM {dynamic_links_filter} WHERE text = :text', array(':text' => strtolower(trim(check_plain($text)))))->fetchAssoc();
   return $row ? $row : FALSE;
 }

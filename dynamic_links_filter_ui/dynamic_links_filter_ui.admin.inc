@@ -121,8 +121,8 @@ function dynamic_links_filter_ui_edit_form(array $form, array &$form_state, arra
   // Merge default values.
   $record += array(
     'dlfid' => NULL,
-    'text' => isset($_GET['text']) ? $_GET['text'] : '',
-    'url' => isset($_GET['url']) ? urldecode($_GET['url']) : '',
+    'text' => '',
+    'url' => '',
   );
 
   $form['dlfid'] = array(
@@ -186,8 +186,8 @@ function dynamic_links_filter_ui_edit_form_validate(array $form, array &$form_st
  */
 function dynamic_links_filter_ui_edit_form_submit(array $form, array &$form_state) {
   $record = $form_state['values'];
-  $record['text'] = strtolower(trim($record['text']));
-  $record['url'] = trim($record['url'], '\/?');
+  $record['text'] = strtolower(trim(check_plain($record['text'])));
+  $record['url'] = trim(drupal_strip_dangerous_protocols($record['url']), '\/?');
   if (empty($record['dlfid'])) {
     $result = drupal_write_record('dynamic_links_filter', $record);
   }
