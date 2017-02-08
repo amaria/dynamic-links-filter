@@ -1,0 +1,10 @@
+; Dynamic Links Filter UI
+;
+; The Administration UI for Dynamic Links Filter
+;
+name = Dynamic Links UI
+description = Administer Dynamic Links
+core = 7.x
+package = "Input filters"
+dependencies[] = dynamic_links_filter
+configure = admin/config/content/dynamic-links-filter

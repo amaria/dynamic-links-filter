@@ -1,0 +1,9 @@
+; Dynamic Links Filter
+;
+; A filter that converts predefined keywords into links.
+;
+core = 7.x
+name = Dynamic Links Filter
+description = A filter that converts predefined keywords into links
+package = "Input filters"
+dependencies[] = filter

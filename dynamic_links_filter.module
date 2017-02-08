@@ -1,0 +1,287 @@
+<?php
+
+/**
+ * @file
+ * Dynamic links filter.
+ *
+ * Converts predefined keywords into links.
+ *
+ * @package Modules
+ * @subpackage Input filters
+ */
+
+/**
+ * Implements hook_permission().
+ */
+function dynamic_links_filter_ui_permission() {
+  return array(
+    'configure dynamic links filter' => array(
+      'title' => t('Configure Dynamic Links Filter'),
+      'description' => t('Access the Dynamic Links Configuration pages.'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_filter_info().
+ */
+function dynamic_links_filter_filter_info() {
+  $filters['filter_dynamic_links_filter'] = array(
+    'title' => t('Dynamic Links filter'),
+    'description' => t('Creates links from predefined keywords and phrases.'),
+    'process callback'  => '_dynamic_links_filter_process',
+    'settings callback' => '_dynamic_links_filter_settings',
+    'default settings' => array(
+      'dynamic_links_filter_node_type' => array(),
+      'dynamic_links_filter_exclude' => '',
+    ),
+    // @TODO Set this to TRUE in production!
+    'cache' => FALSE,
+  );
+
+  return $filters;
+}
+
+/**
+ * Implements callback_filter_process().
+ */
+function _dynamic_links_filter_process($text, $filter, $format, $langcode, $cache, $cache_id) {
+
+  if (is_null($text) || !($node = menu_get_object())) {
+    return $text;
+  }
+
+  /*
+   * Make sure the text is from a full node view and
+   * we are allowed to filter the type of node being viewed.
+   */
+  $filter_nodetypes = array_filter($filter->settings['dynamic_links_filter_node_type']);
+  $excl_pages = $filter->settings['dynamic_links_filter_exclude'];
+
+  if (!_dynamic_links_filter_excluded($excl_pages) && _dynamic_links_filter_is_filtering_node() && isset($filter_nodetypes[$node->type])) {
+
+    // Return keywords in descending order so we process inflections first.
+    $result = db_query("SELECT text,url FROM {dynamic_links_filter} ORDER BY text DESC");
+
+    // First pass of matching. Check each keyword against text and save matches.
+    $all_matches = array();
+    foreach ($result as $data) {
+      $pattern = '|\b' . $data->text . '\b|i';
+      if (preg_match($pattern, $text, $matches)) {
+        $all_matches[$matches[0]] = $data->url;
+      }
+    }
+
+    // Second pass. Replace each match with associated link.
+    foreach ($all_matches as $keyword => $url) {
+
+      // Filter out anchor tags so we don't match any keywords in them.
+      $contents = array();
+      $placeholders = array();
+      _dynamic_links_filter_protect_pattern('|<a.*?</a>|i', $contents, $placeholders, $text);
+
+      // If this keyword is inside other keyword phrases, filter out containing
+      // phrases so we don't match in them.
+      $containers = array();
+      foreach (array_keys($all_matches) as $containing_phrase) {
+        if (strtolower($containing_phrase) != strtolower($keyword) && strpos(strtolower($containing_phrase), strtolower($keyword)) !== FALSE) {
+          $containing_contents = array();
+          $containing_placeholders = array();
+          _dynamic_links_filter_protect_pattern('|\b' . $containing_phrase . '\b|i', $containing_contents, $containing_placeholders, $text);
+          $containers[] = array('contents' => $containing_contents, 'placeholders' => $containing_placeholders);
+        }
+      }
+
+      // Apply our dynamic link filter.
+      $link = _dynamic_links_filter_l($keyword, $url);
+      $text = preg_replace('|\b' . $keyword . '\b|i', $link, $text, 1);
+
+      // Put back containing keywords if any.
+      foreach ($containers as $container) {
+        $text = str_replace($container['placeholders'], $container['contents'], $text);
+      }
+
+      // Put back original anchor tags if any.
+      if (!empty($contents)) {
+        $text = str_replace($placeholders, $contents, $text);
+      }
+
+    } // end foreach for second pass matching.
+
+  } // end if check for full node view and node type.
+
+  return $text;
+}
+
+/**
+ * Implements callback_filter_settings().
+ */
+function _dynamic_links_filter_settings($form, &$form_state, $filter, $format, $defaults, $filters) {
+  $data = node_type_get_types();
+  $options = array();
+  foreach ($data as $type => $type_object) {
+    $options[$type] = $type_object->name;
+  }
+
+  // Display the content types to choose for this filter.
+  $settings['dynamic_links_filter_node_type'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Content Types'),
+    '#default_value' => isset($filter->settings['dynamic_links_filter_node_type']) ? $filter->settings['dynamic_links_filter_node_type'] : $defaults['dynamic_links_filter_node_type'],
+    '#description' => t('Choose the content types that should be filtered'),
+    '#options' => $options,
+  );
+
+  // Display textarea to enter specific pages to exclude from filter.
+  $settings['dynamic_links_filter_exclude'] = array(
+    '#type' => 'textarea',
+    '#title' => t('Exclude Specific Pages'),
+    '#default_value' => isset($filter->settings['dynamic_links_filter_exclude']) ? $filter->settings['dynamic_links_filter_exclude'] : $defaults['dynamic_links_filter_exclude'],
+    '#description' => t("Enter the path of the pages you want to exclude. Enter one page per line. The '*' character is a wildcard. Example paths are blog for the blog page and blog/* for every personal blog. &lt;front&gt; is the front page."),
+    '#wysiwyg' => FALSE,
+  );
+
+  return $settings;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter().
+ *
+ * Because filter format forms are merged, any common keys need to be added in
+ * a form_alter. Otherwise, e.g. submit handlers added by one module would be
+ * overwritten by those of another module.
+ */
+function dynamic_links_filter_filter_admin_configure_alter(&$form, $form_state) {
+  if (isset($form['format']) && isset($form['filter_dynamic_links_filter_' . $form['format']['#value']])) {
+    // Add the submit callback to the beginning of the array because we need
+    // to prepare data for system_settings_form_submit().
+    array_unshift($form['#submit'], 'dynamic_links_filters_settings_form_submit');
+  }
+}
+
+/**
+ * Submit function for dynamic links filter. Clears the filters cache.
+ *
+ * @param array $form
+ *   The submitted form.
+ * @param array $form_state
+ *   The submitted form state.
+ */
+function dynamic_links_filters_settings_form_submit(array $form, array &$form_state) {
+  $format = $form_state['values']['format'];
+  cache_clear_all($format . ':', 'cache_filter', TRUE);
+}
+
+/**
+ * Create an HTML link from the given url string.
+ *
+ * @param string $text
+ *   The link text.
+ * @param string $url_string
+ *   The link url.
+ * @param array $options
+ *   Options for Drupal url() function.
+ *
+ * @return string
+ *   formatted link.
+ */
+function _dynamic_links_filter_l($text, $url_string, array $options = NULL) {
+  if (is_null($options)) {
+    $options = array();
+  }
+
+  $url_parts = explode('#', $url_string);
+
+  if (count($url_parts) > 1) {
+    $options['fragment'] = $url_parts[1];
+  }
+
+  $url_parts = explode('?', $url_parts[0]);
+
+  return l($text, $url_parts[0], $options);
+}
+
+/**
+ * Returns true if the text being filtered is from a full node view.
+ *
+ * Should only be called from hook_filter().
+ *
+ * @return bool
+ *   Whether or not text is being filtered in full node view.
+ */
+function _dynamic_links_filter_is_filtering_node() {
+  $backtrace = debug_backtrace();
+  foreach ($backtrace as $function_call) {
+    if ($function_call['function'] == 'node_view' && ($view_mode = $function_call['args'][1]) == 'full') {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Filters out the input pattern from the input text.
+ *
+ * Replaces input text with placeholder data.
+ * Also saves the matches and what they were replaced with.
+ *
+ * @param string $pattern
+ *    A regexp pattern that matches the text to protect
+ *    (e.g. |<a.*?</a>| filters out anchor tags).
+ * @param array $contents
+ *    Initially empty. Afterwards contains the array of matches.
+ * @param array $placeholders
+ *    Initially empty. Afterwards contains the array of placeholders.
+ * @param string $text
+ *    The source text to filter. afterwards contains the filtered text.
+ */
+function _dynamic_links_filter_protect_pattern($pattern, array &$contents, array &$placeholders, &$text) {
+  static $n = 0;
+  $count = 0;
+  while (preg_match($pattern, $text, $matches)) {
+    $contents[$count] = $matches[0];
+    $placeholders[$count] = "@@" . $n . "_" . $count . "@@";
+    $text = preg_replace($pattern, $placeholders[$count], $text, 1);
+    ++$count;
+  }
+  ++$n;
+}
+
+/**
+ * Clear filter cache for dynamic links filter.
+ *
+ * @param string $filter
+ *   The name of the cache to clear.
+ */
+function _dynamic_links_filter_clear_cache_by_filter($filter = NULL) {
+  if (is_null($filter)) {
+    return;
+  }
+
+  if ($filter == 'dynamic_links_filter') {
+    $result = db_query("SELECT SUBSTRING_INDEX(name, '_' , -1) AS format FROM {variable} WHERE name LIKE :link", array(':link' => 'filter_dynamic_links_filter%'));
+    foreach ($result as $row) {
+      cache_clear_all($row->format . ':', 'cache_filter', TRUE);
+    }
+    return;
+  }
+}
+
+/**
+ * Determine whether or not the current page should be filtered.
+ *
+ * @param string $pages
+ *   Pages to  be excluded.
+ *
+ * @return bool
+ *   whether or not the page should be filtered.
+ */
+function _dynamic_links_filter_excluded($pages) {
+  $path = drupal_get_path_alias($_GET['q']);
+  // Compare with the internal and path alias (if any).
+  $page_match = drupal_match_path($path, $pages);
+  if ($path != $_GET['q']) {
+    $page_match = $page_match || drupal_match_path($_GET['q'], $pages);
+  }
+  return $page_match;
+}

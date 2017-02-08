@@ -1,0 +1,37 @@
+<?php
+
+/**
+ * @file
+ * Install file for Dynamic Links Filter.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function dynamic_links_filter_schema() {
+  $schema['dynamic_links_filter'] = array(
+    'description' => 'Stores dynamic links.',
+    'fields' => array(
+      'dlfid'  => array(
+        'type' => 'serial',
+        'not null' => TRUE,
+        'description' => 'Primary Key: Unique dynamic link ID.',
+      ),
+      'text' => array(
+        'type' => 'varchar',
+        'length' => 560,
+        'not null' => TRUE,
+        'description' => 'The text to dynamically link.',
+      ),
+      'url' => array(
+        'type' => 'varchar',
+        'length' => 560,
+        'not null' => TRUE,
+        'description' => 'The url to link to.',
+      ),
+    ),
+    'primary key' => array('dlfid'),
+  );
+
+  return $schema;
+}

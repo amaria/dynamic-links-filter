@@ -1,0 +1,81 @@
+<?php
+
+/**
+ * @file
+ * Dynamic Link Administration.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function dynamic_links_filter_ui_menu() {
+  $items['admin/config/content/dynamic-links-filter'] = array(
+    'title' => 'Dynamic Links',
+    'description' => 'Enter text and link URLs.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dynamic_links_filter_ui_admin_links'),
+    'access arguments' => array('configure dynamic links filter'),
+    'file' => 'dynamic_links_filter_ui.admin.inc',
+  );
+  $items['admin/config/content/dynamic-links-filter/list'] = array(
+    'title' => 'List',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'weight' => -10,
+  );
+  $items['admin/config/content/dynamic-links-filter/add'] = array(
+    'title' => 'Add dynamic link',
+    'description' => 'Add a new text and link URL.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dynamic_links_filter_ui_edit_form'),
+    'access arguments' => array('configure dynamic links filter'),
+    'type' => MENU_LOCAL_TASK,
+    'file' => 'dynamic_links_filter_ui.admin.inc',
+  );
+  $items['admin/config/content/dynamic-links-filter/edit/%dynamic_links_filter_ui'] = array(
+    'title' => 'Edit dynamic link',
+    'description' => 'Edit an existing text and link URL.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dynamic_links_filter_ui_edit_form', 5),
+    'access arguments' => array('configure dynamic links filter'),
+    'type' => MENU_CALLBACK,
+    'file' => 'dynamic_links_filter_ui.admin.inc',
+  );
+  $items['admin/config/content/dynamic-links-filter/delete/%dynamic_links_filter_ui'] = array(
+    'title' => 'Delete dynamic link',
+    'description' => 'Delete an existing text and link URL.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('dynamic_links_filter_ui_delete_form', 5),
+    'access arguments' => array('configure dynamic links filter'),
+    'type' => MENU_CALLBACK,
+    'file' => 'dynamic_links_filter_ui.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Wildcard loader for dynamic links edit form.
+ *
+ * @param int $id
+ *   The id of the record to edit.
+ *
+ * @return array|false
+ *   The record or false if not found.
+ */
+function dynamic_links_filter_ui_load($id) {
+  $row = db_query('SELECT * FROM {dynamic_links_filter} WHERE dlfid = :dlfid', array(':dlfid' => $id))->fetchAssoc();
+  return $row ? $row : FALSE;
+}
+
+/**
+ * Returns the dynamic links filter record associated with the given text.
+ *
+ * @param string $text
+ *   Link Text.
+ *
+ * @return array|false
+ *   Dynamic Links record associated with given text.
+ */
+function dynamic_links_filter_ui_load_by_text($text) {
+  $row = db_query('SELECT * FROM {dynamic_links_filter} WHERE text = :text', array(':text' => strtolower(trim($text))))->fetchAssoc();
+  return $row ? $row : FALSE;
+}
