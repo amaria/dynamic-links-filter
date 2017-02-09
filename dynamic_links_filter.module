@@ -106,9 +106,9 @@ function _dynamic_links_filter_process($text, $filter, $format, $langcode, $cach
         $text = str_replace($placeholders, $contents, $text);
       }
 
-    } // end foreach for second pass matching.
+    }
 
-  } // end if check for full node view and node type.
+  }
 
   return $text;
 }
@@ -212,7 +212,7 @@ function _dynamic_links_filter_l($text, $url_string, array $options = NULL) {
 function _dynamic_links_filter_is_filtering_node() {
   $backtrace = debug_backtrace();
   foreach ($backtrace as $function_call) {
-    if ($function_call['function'] == 'node_view' && ($view_mode = $function_call['args'][1]) == 'full') {
+    if ($function_call['function'] == 'node_view' && $function_call['args'][1] == 'full') {
       return TRUE;
     }
   }

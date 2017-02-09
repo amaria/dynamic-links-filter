@@ -60,7 +60,7 @@ function dynamic_links_filter_ui_list_dynamic_links(array $sql = array(), $table
 
   $destination = drupal_get_destination();
   $rows = array();
-  $weight = 0;
+
   foreach ($links as $dlfid => $link) {
     $row = array();
     if (isset($header['text'])) {
@@ -215,14 +215,14 @@ function dynamic_links_filter_ui_edit_form_submit(array $form, array &$form_stat
  *   The delete confirmation form.
  */
 function dynamic_links_filter_ui_delete_form(array $form, array &$form_state, array $record) {
-  $form['redirect'] = array(
+  $form['record'] = array(
     '#type' => 'value',
     '#value' => $record,
   );
 
   return confirm_form(
     $form,
-    t('Are you sure you want to delete the text %text to %record?', array('%text' => $record['text'], '%record' => $record['url'])),
+    t('Are you sure you want to delete the text %text to %url?', array('%text' => $record['text'], '%url' => $record['url'])),
     isset($_GET['destination']) ? $_GET['destination'] : 'admin/config/content/dynamic-links-filter'
   );
 }
@@ -236,7 +236,9 @@ function dynamic_links_filter_ui_delete_form(array $form, array &$form_state, ar
  *   The delete form state.
  */
 function dynamic_links_filter_ui_delete_form_submit(array $form, array &$form_state) {
-  $deleted = db_query('DELETE FROM {dynamic_links_filter} WHERE dlfid=:dlfid', array(':dlfid' => $form_state['values']['redirect']['dlfid']))->rowCount();
+  $deleted = db_delete('dynamic_links_filter')
+    ->condition('dlfid', $form_state['values']['record']['dlfid'])
+    ->execute();
   drupal_set_message($deleted ? t('The dynamic link has been deleted.') : t('An unknown error occurred'));
   if ($deleted) {
     _dynamic_links_filter_clear_cache_by_filter('dynamic_links_filter');
