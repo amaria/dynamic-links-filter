@@ -28,7 +28,7 @@ function dynamic_links_filter_ui_menu() {
     'page callback' => 'drupal_get_form',
     'page arguments' => array('dynamic_links_filter_ui_edit_form'),
     'access arguments' => array('configure dynamic links filter'),
-    'type' => MENU_LOCAL_TASK,
+    'type' => MENU_LOCAL_ACTION,
     'file' => 'dynamic_links_filter_ui.admin.inc',
   );
   $items['admin/config/content/dynamic-links-filter/edit/%dynamic_links_filter_ui'] = array(
