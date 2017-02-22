@@ -10,9 +10,11 @@
  */
 function dynamic_links_filter_ui_admin_links($form, &$form_state) {
 
+  // Starting sql conditions for the dynamic links list select query.
   $sql = array('conditions' => array(), 'args' => array(), 'limit' => 50);
 
-  $form['dlfids'] = dynamic_links_filter_ui_list_dynamic_links($sql, TRUE);
+  // Adds a list of dynamic links with edit/delete links and pager to the form.
+  $form['dlfids'] = dynamic_links_filter_ui_list_dynamic_links($sql);
   $form['pager'] = array(
     '#type' => 'markup',
     '#markup' => theme('pager', array()),
@@ -22,54 +24,59 @@ function dynamic_links_filter_ui_admin_links($form, &$form_state) {
 }
 
 /**
- * Render a list of links for the dynamic links configuration page.
+ * Returns a render array of links for the dynamic links configuration page.
+ *
+ * The render array is an HTML table theme.
  *
  * @param array $sql
  *   The starting sql conditions and options.
- * @param bool $tableselect
- *   Tableselect.
  *
  * @return array
  *   Render array.
  *
  * @throws Exception
  */
-function dynamic_links_filter_ui_list_dynamic_links(array $sql = array(), $tableselect = FALSE) {
+function dynamic_links_filter_ui_list_dynamic_links(array $sql = array()) {
 
+  // Define the table header.
   $header = array(
     'text' => array('data' => t('Text'), 'field' => 'text', 'sort' => 'asc'),
     'url' => array('data' => t('Link URL'), 'field' => 'url'),
     'operations' => array('data' => t('Operations')),
   );
 
+  // Get the current mappings from the database, ordered alphabetically.
   $query = db_select('dynamic_links_filter', 'dlf')
     ->fields('dlf')
     ->addTag('translatable')
     ->orderBy('dlf.text', 'ASC');
 
+  // Add a pager limited by the specified limit.
   if ($sql['limit']) {
     $query = $query->extend('PagerDefault')->limit($sql['limit']);;
   }
 
-  $result = $query->execute();
+  // Get the results as an array keyed by the table id.
+  $links = $query->execute()->fetchAllAssoc('dlfid');
 
-  $links = array();
-  foreach ($result as $link) {
-    $links[$link->dlfid] = $link;
-  }
-
+  // Set the return page.
   $destination = drupal_get_destination();
   $rows = array();
 
+  // Build the table rows.
   foreach ($links as $dlfid => $link) {
     $row = array();
+    // Fill the columns for each header column.
     if (isset($header['text'])) {
+      // Get plain text for the keyword text.
       $row['text'] = htmlentities($link->text);
     }
     if (isset($header['url'])) {
+      // Create a link for the url column.
       $row['url'] = _dynamic_links_filter_l($link->url, $link->url);
     }
     if (isset($header['operations'])) {
+      // Create the edit/delete links in the operations column.
       $operations = array();
       $operations['edit'] = array(
         'title' => t('Edit'),
@@ -81,26 +88,24 @@ function dynamic_links_filter_ui_list_dynamic_links(array $sql = array(), $table
         'href' => 'admin/config/content/dynamic-links-filter/delete/' . $dlfid,
         'query' => $destination,
       );
+      // Theme the operations links as inline theme_link.
       $link_options = array(
         'links' => $operations,
         'attributes' => array('class' => 'links inline'),
       );
       $row['operations'] = theme('links', $link_options);
     }
+    // Add this row to the list of rows keyed by id.
+    // The id needs to be a string so that it's not an array index.
     $rows[(string) $dlfid] = $row;
   }
-  if (empty($rows)) {
-    $rows[] = array(
-      array(
-        'data' => t('No dynamic links available.'),
-        'colspan' => count($header),
-        'class' => 'empty',
-      ),
-    );
-  }
+
+  // Now build the theme_table render array.
   return array(
-    '#type' => 'markup',
-    '#markup' => theme('table', array('header' => $header, 'rows' => $rows)),
+    '#theme' => 'table',
+    '#header' => $header,
+    '#rows' => $rows,
+    '#empty' =>t('No dynamic links available.'),
   );
 }
 
@@ -125,6 +130,7 @@ function dynamic_links_filter_ui_edit_form(array $form, array &$form_state, arra
     'url' => '',
   );
 
+  // Add fields for the dynamic link edit form.
   $form['dlfid'] = array(
     '#type' => 'value',
     '#value' => $record['dlfid'],
@@ -167,10 +173,14 @@ function dynamic_links_filter_ui_edit_form(array $form, array &$form_state, arra
  *   The add/edit form state.
  */
 function dynamic_links_filter_ui_edit_form_validate(array $form, array &$form_state) {
+  // Get the database record for the keyword text entered.
   $record = dynamic_links_filter_ui_load_by_text($form_state['values']['text']);
+
+  // Do not add another record if the keyword text already exists.
   if ($record && $form_state['values']['dlfid'] != $record['dlfid']) {
     form_set_error('text', t('The text %text is already being linked. Do you want to <a href="@edit-page">edit the existing link</a>?', array('%text' => $record['text'], '@edit-page' => url('admin/config/content/dynamic-links-filter/edit/' . $record['dlfid']))));
   }
+  // Ensure a valid absolute or relative url.
   if (!valid_url($form_state['values']['url']) && !valid_url($form_state['values']['url'], TRUE) && $form_state['values']['url'] != '<front>') {
     form_set_error('url', t('The link url does not appear valid.'));
   }
@@ -185,19 +195,31 @@ function dynamic_links_filter_ui_edit_form_validate(array $form, array &$form_st
  *   The add/edit form state.
  */
 function dynamic_links_filter_ui_edit_form_submit(array $form, array &$form_state) {
+  // Get the record to add/edit.
   $record = $form_state['values'];
+
+  // Cleanup the input before storing.
   $record['text'] = strtolower(trim(check_plain($record['text'])));
   $record['url'] = trim(drupal_strip_dangerous_protocols($record['url']), '\/?');
+
+  // Write a new record if there is no id.
   if (empty($record['dlfid'])) {
     $result = drupal_write_record('dynamic_links_filter', $record);
   }
+  // Otherwise update the record.
   else {
     $result = drupal_write_record('dynamic_links_filter', $record, array('dlfid'));
   }
+
+  // Set a friendly result message.
   drupal_set_message($result ? t('The dynamic link has been saved.') : t('An unknown error occurred'));
+
+  // Reset the filter cache when a mapping has been added/edited.
   if ($result) {
     _dynamic_links_filter_clear_cache_by_filter('dynamic_links_filter');
   }
+
+  // Redirect back to the list.
   $form_state['redirect'] = 'admin/config/content/dynamic-links-filter';
 }
 
@@ -215,11 +237,13 @@ function dynamic_links_filter_ui_edit_form_submit(array $form, array &$form_stat
  *   The delete confirmation form.
  */
 function dynamic_links_filter_ui_delete_form(array $form, array &$form_state, array $record) {
+  // Add the record (from the wildcard loader) as a value form field.
   $form['record'] = array(
     '#type' => 'value',
     '#value' => $record,
   );
 
+  // Build and return a confirmation form for when delete button pressed.
   return confirm_form(
     $form,
     t('Are you sure you want to delete the text %text to %url?', array('%text' => $record['text'], '%url' => $record['url'])),
@@ -236,12 +260,19 @@ function dynamic_links_filter_ui_delete_form(array $form, array &$form_state, ar
  *   The delete form state.
  */
 function dynamic_links_filter_ui_delete_form_submit(array $form, array &$form_state) {
+  // Delete the record given in the value field.
   $deleted = db_delete('dynamic_links_filter')
     ->condition('dlfid', $form_state['values']['record']['dlfid'])
     ->execute();
+
+  // Set a friendly result message.
   drupal_set_message($deleted ? t('The dynamic link has been deleted.') : t('An unknown error occurred'));
+
+  // Clear the filter cache after deleting.
   if ($deleted) {
     _dynamic_links_filter_clear_cache_by_filter('dynamic_links_filter');
   }
+
+  // Go back to the list page.
   $form_state['redirect'] = 'admin/config/content/dynamic-links-filter';
 }

@@ -14,15 +14,16 @@
  * Implements hook_help().
  */
 function dynamic_links_filter_help($path, $arg) {
+  $module_path = drupal_get_path('module', 'dynamic_links_filter');
   switch ($path) {
     case 'admin/help#dynamic_links_filter':
 
-      $filepath = dirname(__FILE__) . '/README.md';
+      $filepath = $module_path . '/README.md';
       if (file_exists($filepath)) {
         $readme = file_get_contents($filepath);
       }
       else {
-        $filepath = dirname(__FILE__) . '/README.txt';
+        $filepath = $module_path . '/README.txt';
         if (file_exists($filepath)) {
           $readme = file_get_contents($filepath);
         }
