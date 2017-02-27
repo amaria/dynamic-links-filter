@@ -105,7 +105,7 @@ function dynamic_links_filter_ui_list_dynamic_links(array $sql = array()) {
     '#theme' => 'table',
     '#header' => $header,
     '#rows' => $rows,
-    '#empty' =>t('No dynamic links available.'),
+    '#empty' => t('No dynamic links available.'),
   );
 }
 

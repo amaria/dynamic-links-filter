@@ -75,8 +75,6 @@ function dynamic_links_filter_filter_info() {
       'dynamic_links_filter_node_type' => array(),
       'dynamic_links_filter_exclude' => '',
     ),
-    // @TODO Set this to TRUE in production!
-    'cache' => FALSE,
   );
 
   return $filters;
@@ -90,6 +88,10 @@ function _dynamic_links_filter_process($text, $filter, $format, $langcode, $cach
   if (is_null($text) || !($node = menu_get_object())) {
     return $text;
   }
+
+  // Make our own regex word boundary pattern.
+  $b_left = '(?<=^|\s|"|\')';
+  $b_right = '(?=$|\s|"|\')';
 
   /*
    * Make sure the text is from a full node view and
@@ -106,7 +108,11 @@ function _dynamic_links_filter_process($text, $filter, $format, $langcode, $cach
     // First pass of matching. Check each keyword against text and save matches.
     $all_matches = array();
     foreach ($result as $data) {
-      $pattern = '|\b' . $data->text . '\b|i';
+      // The user must have access to the url.
+      if (!drupal_valid_path($data->url)) {
+        continue;
+      }
+      $pattern = '/' . $b_left . preg_quote($data->text, '/') . $b_right . '/i';
       if (preg_match($pattern, $text, $matches)) {
         $all_matches[$matches[0]] = $data->url;
       }
@@ -124,17 +130,17 @@ function _dynamic_links_filter_process($text, $filter, $format, $langcode, $cach
       // phrases so we don't match in them.
       $containers = array();
       foreach (array_keys($all_matches) as $containing_phrase) {
-        if (strtolower($containing_phrase) != strtolower($keyword) && strpos(strtolower($containing_phrase), strtolower($keyword)) !== FALSE) {
+        if (drupal_strtolower($containing_phrase) != drupal_strtolower($keyword) && strpos(drupal_strtolower($containing_phrase), drupal_strtolower($keyword)) !== FALSE) {
           $containing_contents = array();
           $containing_placeholders = array();
-          _dynamic_links_filter_protect_pattern('|\b' . $containing_phrase . '\b|i', $containing_contents, $containing_placeholders, $text);
+          _dynamic_links_filter_protect_pattern('/' . $b_left . preg_quote($containing_phrase, '/') . $b_right . '/i', $containing_contents, $containing_placeholders, $text);
           $containers[] = array('contents' => $containing_contents, 'placeholders' => $containing_placeholders);
         }
       }
 
       // Apply our dynamic link filter.
       $link = _dynamic_links_filter_l($keyword, $url);
-      $text = preg_replace('|\b' . $keyword . '\b|i', $link, $text, 1);
+      $text = preg_replace('/' . $b_left . preg_quote($keyword, '/') . $b_right . '/i', $link, $text, 1);
 
       // Put back containing keywords if any.
       foreach ($containers as $container) {
@@ -266,14 +272,14 @@ function _dynamic_links_filter_is_filtering_node() {
  * Also saves the matches and what they were replaced with.
  *
  * @param string $pattern
- *    A regexp pattern that matches the text to protect
- *    (e.g. |<a.*?</a>| filters out anchor tags).
+ *   A regexp pattern that matches the text to protect
+ *   (e.g. |<a.*?</a>| filters out anchor tags).
  * @param array $contents
- *    Initially empty. Afterwards contains the array of matches.
+ *   Initially empty. Afterwards contains the array of matches.
  * @param array $placeholders
- *    Initially empty. Afterwards contains the array of placeholders.
+ *   Initially empty. Afterwards contains the array of placeholders.
  * @param string $text
- *    The source text to filter. afterwards contains the filtered text.
+ *   The source text to filter. afterwards contains the filtered text.
  */
 function _dynamic_links_filter_protect_pattern($pattern, array &$contents, array &$placeholders, &$text) {
   static $n = 0;
