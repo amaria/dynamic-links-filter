@@ -251,8 +251,8 @@ function _dynamic_links_filter_l($text, $url_string, array $options = NULL) {
  *
  * Should only be called from hook_filter().
  *
- * @return stdClass|FALSE
- *   The node object or FALSE.
+ * @return object|false
+ *   The node object or false.
  */
 function _dynamic_links_filter_is_filtering_node() {
   $backtrace = debug_backtrace();
