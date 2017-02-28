@@ -247,7 +247,7 @@ function dynamic_links_filter_ui_delete_form(array $form, array &$form_state, ar
   return confirm_form(
     $form,
     t('Are you sure you want to delete the text %text to %url?', array('%text' => $record['text'], '%url' => $record['url'])),
-    isset($_GET['destination']) ? $_GET['destination'] : 'admin/config/content/dynamic-links-filter'
+    drupal_get_destination()
   );
 }
 

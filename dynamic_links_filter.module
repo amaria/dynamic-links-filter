@@ -85,7 +85,7 @@ function dynamic_links_filter_filter_info() {
  */
 function _dynamic_links_filter_process($text, $filter, $format, $langcode, $cache, $cache_id) {
 
-  if (is_null($text) || !($node = menu_get_object())) {
+  if (is_null($text) || path_is_admin(current_path()) || !($node = _dynamic_links_filter_is_filtering_node())) {
     return $text;
   }
 
@@ -94,13 +94,12 @@ function _dynamic_links_filter_process($text, $filter, $format, $langcode, $cach
   $b_right = '(?=$|\s|"|\')';
 
   /*
-   * Make sure the text is from a full node view and
-   * we are allowed to filter the type of node being viewed.
+   * Make sure we are allowed to filter the type of node being viewed.
    */
   $filter_nodetypes = array_filter($filter->settings['dynamic_links_filter_node_type']);
   $excl_pages = $filter->settings['dynamic_links_filter_exclude'];
 
-  if (!_dynamic_links_filter_excluded($excl_pages) && _dynamic_links_filter_is_filtering_node() && isset($filter_nodetypes[$node->type])) {
+  if (!_dynamic_links_filter_excluded($excl_pages) && isset($filter_nodetypes[$node->type])) {
 
     // Return keywords in descending order so we process inflections first.
     $result = db_query("SELECT text,url FROM {dynamic_links_filter} ORDER BY text DESC");
@@ -248,18 +247,18 @@ function _dynamic_links_filter_l($text, $url_string, array $options = NULL) {
 }
 
 /**
- * Returns true if the text being filtered is from a full node view.
+ * Returns the node object if the text being filtered is from a full node view.
  *
  * Should only be called from hook_filter().
  *
- * @return bool
- *   Whether or not text is being filtered in full node view.
+ * @return stdClass|FALSE
+ *   The node object or FALSE.
  */
 function _dynamic_links_filter_is_filtering_node() {
   $backtrace = debug_backtrace();
   foreach ($backtrace as $function_call) {
     if ($function_call['function'] == 'node_view' && $function_call['args'][1] == 'full') {
-      return TRUE;
+      return $function_call['args'][0];
     }
   }
   return FALSE;
@@ -323,11 +322,12 @@ function _dynamic_links_filter_clear_cache_by_filter($filter = NULL) {
  *   whether or not the page should be filtered.
  */
 function _dynamic_links_filter_excluded($pages) {
-  $path = drupal_get_path_alias($_GET['q']);
+  $current_path = current_path();
+  $path = drupal_get_path_alias();
   // Compare with the internal and path alias (if any).
   $page_match = drupal_match_path($path, $pages);
-  if ($path != $_GET['q']) {
-    $page_match = $page_match || drupal_match_path($_GET['q'], $pages);
+  if ($path != $current_path) {
+    $page_match = $page_match || drupal_match_path($current_path, $pages);
   }
   return $page_match;
 }
